@@ -14,7 +14,8 @@ use vars qw($VERSION @ISA @EXPORT_OK %EXPORT_TAGS);
     all => [ qw(any all none notall true false firstidx first_index lastidx
 		last_index insert_after insert_after_string apply after after_incl before
 		before_incl indexes firstval first_value lastval last_value each_array
-		each_arrayref pairwise natatime mesh zip uniq minmax part bsearch) ],
+		each_arrayref grep_pairs map_pairs pairwise natatime mesh zip uniq minmax
+    part bsearch) ],
 );
 
 @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
@@ -350,6 +351,56 @@ sub bsearch(&@) {
     return;
 }
 
+sub grep_pairs(&@) {
+    my $code = shift;
+
+    if (@_ % 2 != 0) {
+        require Carp;
+        Carp::croak "grep_pairs: odd number of elements in the list\n";
+    }
+
+    # get references to $a, $b in the caller's package
+    my ($caller_a, $caller_b) = do {
+        my $pkg = caller;
+        no strict 'refs';
+        \*{"${pkg}::a"}, \*{"${pkg}::b"};
+    };
+    local (*$caller_a, *$caller_b);
+
+    my @ret;
+    while (my ($a, $b) = splice @_, 0, 2) {
+        (*$caller_a, *$caller_b) = \($a, $b);
+        push @ret, $code->() ? ($a, $b) : ();
+    }
+
+    return @ret;
+}
+
+sub map_pairs(&@) {
+    my $code = shift;
+
+    if (@_ % 2 != 0) {
+        require Carp;
+        Carp::croak "map_pairs: odd number of elements in the list\n";
+    }
+
+    # get references to $a, $b in the caller's package
+    my ($caller_a, $caller_b) = do {
+        my $pkg = caller;
+        no strict 'refs';
+        \*{"${pkg}::a"}, \*{"${pkg}::b"};
+    };
+    local (*$caller_a, *$caller_b);
+
+    my @ret;
+    while (my ($a, $b) = splice @_, 0, 2) {
+        (*$caller_a, *$caller_b) = \($a, $b);
+        push @ret, $code->();
+    }
+
+    return @ret;
+}
+
 sub _XScompiled {
     return 0;
 }
@@ -602,6 +653,31 @@ the index of the last fetched set of values, as a scalar.
 
 Like each_array, but the arguments are references to arrays, not the
 plain arrays.
+
+=item grep_pairs BLOCK LIST
+
+Evaluates BLOCK for each element pair (ie. first and second element, then third
+and fourth and so on) in LIST and returns a new list consisting of those
+element pairs for which BLOCK returns a true value. The two elements of the
+pair are set to C<$a> and C<$b>. Note that those two are aliases to the
+original value so changing them will modify the input array.
+
+Useful for filtering hashes (in list form).
+
+  my %having_uppercase_key = grep_pairs { $a =~ /^[A-Z]+$/ } %h;
+  my %having_odd_value     = grep_pairs { $b % 2 != 0      } %h;
+
+=item map_pairs BLOCK LIST
+
+Evaluates BLOCK for each element pair in LIST and returns a new list consisting
+of BLOCK's return values. The two elements are set to C<$a> and C<$b>. Note
+that those two are aliases to the original value so changing them will modify
+the input array.
+
+Useful for transforming hashes (in list form).
+
+  my %with_uppercase_key  = map_pairs { (uc $a =>     $b) } %h;
+  my %with_doubled_value  = map_pairs { (   $a => 2 * $b) } %h;
 
 =item natatime BLOCK LIST
 

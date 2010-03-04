@@ -354,6 +354,32 @@ BEGIN { $TESTS += 5 }
 
 }
 
+BEGIN { $TESTS += 2 }
+{
+  my @a = (zero => 0, three => 3, one => 1, two => 2, four => 4, five => 5);
+
+  my @contains_e  = grep_pairs { $a =~ /e/   } @a;
+  my @even        = grep_pairs { $b % 2 == 0 } @a;
+
+  ok(arrayeq(\@contains_e,  [ zero => 0, three => 3, one => 1, five => 5 ]));
+  ok(arrayeq(\@even,        [ zero => 0, two => 2, four => 4 ]));
+}
+
+BEGIN { $TESTS += 2 }
+{
+  my @a = (zero => 0, three => 3, one => 1, two => 2, four => 4, five => 5);
+
+  my @with_uppercase_keys = map_pairs { (uc $a =>     $b) } @a;
+  my @with_doubled_values = map_pairs { (   $a => 2 * $b) } @a;
+
+  ok(arrayeq(\@with_uppercase_keys, [
+    ZERO => 0, THREE => 3, ONE => 1, TWO => 2, FOUR => 4, FIVE => 5,
+  ]));
+  ok(arrayeq(\@with_doubled_values, [
+    zero => 0, three => 6, one => 2, two => 4, four => 8, five => 10,
+  ]));
+}
+
 BEGIN { $TESTS += 11 }
 {
     my @a = (1, 2, 3, 4, 5);

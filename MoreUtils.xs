@@ -1024,6 +1024,131 @@ each_arrayref (...)
     OUTPUT:
 	RETVAL
 
+void
+grep_pairs (code, ...)
+    SV *code;
+PROTOTYPE: &@
+CODE:
+{
+    dMULTICALL; dSTACK;
+    register int i, j;
+    HV *stash;
+    GV *gv;
+    I32 gimme = G_SCALAR;
+    CV *cv;
+
+    if ((items & 1) == 0) {    /* should be odd b/c BLOCK counts as one */
+        croak("grep_pairs: odd number of elements in the list");
+    }
+
+    if (in_pad("a", code) || in_pad("b", code)) {
+        croak("Can't use lexical $a or $b in grep_pairs code block");
+    }
+
+    if (!PL_firstgv || !PL_secondgv) {
+        SAVESPTR(PL_firstgv);
+        SAVESPTR(PL_secondgv);
+        PL_firstgv = gv_fetchpv("a", TRUE, SVt_PV);
+        PL_secondgv = gv_fetchpv("b", TRUE, SVt_PV);
+    }
+
+    COPY_STACK;
+
+    cv = sv_2cv(code, &stash, &gv, 0);
+    PUSH_MULTICALL(cv);
+
+    for (i = 1, j = 0; i < items; i += 2) {
+        GvSV(PL_firstgv)  = STA(i);
+        GvSV(PL_secondgv) = STA(i+1);
+        MULTICALL;
+        if (SvTRUE(*PL_stack_sp)) {
+            ST(j) = sv_2mortal(newSVsv(ST(i)));
+            /* POP_MULTICALL further down will decrement it by one */
+            SvREFCNT_inc(ST(j++));
+
+            ST(j) = sv_2mortal(newSVsv(ST(i+1)));
+            /* POP_MULTICALL further down will decrement it by one */
+            SvREFCNT_inc(ST(j++));
+        }
+    }
+
+    POP_MULTICALL;
+    FREE_STACK;
+
+    XSRETURN(j);
+}
+
+void
+map_pairs (code, ...)
+    SV *code;
+PROTOTYPE: &@
+PPCODE:
+{
+    /* See the comment before 'pairwise' about efficiency. */
+    register int i, j;
+    SV **oldsp;
+    register SV **buf, **p;	/* gather return values here and later copy down to SP */
+    int alloc;
+    int nitems = 0;
+    register int d;
+
+    if ((items & 1) == 0) {    /* should be odd b/c BLOCK counts as one */
+        croak("map_pairs: odd number of elements in the list");
+    }
+
+    if (in_pad("a", code) || in_pad("b", code)) {
+        croak("Can't use lexical $a or $b in map_pairs code block");
+    }
+
+    if (!PL_firstgv || !PL_secondgv) {
+        SAVESPTR(PL_firstgv);
+        SAVESPTR(PL_secondgv);
+        PL_firstgv = gv_fetchpv("a", TRUE, SVt_PV);
+        PL_secondgv = gv_fetchpv("b", TRUE, SVt_PV);
+    }
+
+    New(0, buf, alloc = items, SV*);
+
+    ENTER;
+    for (i = 1, j = 0, d = 0; i < items; i += 2) {
+        int nret;
+
+        GvSV(PL_firstgv)  = ST(i);
+        GvSV(PL_secondgv) = ST(i+1);
+
+        PUSHMARK(SP);
+        PUTBACK;
+        nret = call_sv(code, G_EVAL|G_ARRAY);
+        if (SvTRUE(ERRSV)) {
+            Safefree(buf);
+            croak("%s", SvPV_nolen(ERRSV));
+        }
+        SPAGAIN;
+        nitems += nret;
+
+        if (nitems > alloc) {
+            alloc <<= 2;
+            Renew(buf, alloc, SV*);
+        }
+        for (j = nret-1; j >= 0; j--) {
+            /* POPs would return elements in reverse order */
+            buf[d] = sp[-j];
+            SvREFCNT_inc(buf[d]);
+            d++;
+        }
+        sp -= nret;
+    }
+    LEAVE;
+    EXTEND(SP, nitems);
+
+    for (i = 0, p = buf; i < nitems; i++)
+        ST(i) = *p++;
+
+    Safefree(buf);
+
+    XSRETURN(nitems);
+}
+
 #if 0
 void
 _pairwise (code, ...)
@@ -1618,4 +1743,3 @@ DESTROY(sv)
 	    CvXSUBANY(code).any_ptr = NULL;
 	}
     }
-
