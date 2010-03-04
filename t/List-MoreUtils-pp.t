@@ -485,6 +485,19 @@ BEGIN { $TESTS += 4 }
     ok($u, 1);
 }
 	   
+BEGIN { $TESTS += 3 }
+{
+    my @a = map { (0 .. 10000) } 0 .. 1;
+    my @u = uniq_by { int($_ / 3) } @a;
+    ok(arrayeq(\@u, [ map { 3 * $_ } 0 .. 3333 ]));
+
+    my $u = uniq_by { int($_ / 3) } @a;
+    ok(3334, $u);
+
+    my @uniq = uniq_by { $_ } (1, 2, 1, 3, undef, '');
+    ok(arrayeq(\@uniq, [ 1, 2, 3, undef, '']));
+}
+	   
 BEGIN { $TESTS += 8 }
 {
     my @list = reverse 0 .. 100_000;

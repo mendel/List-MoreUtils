@@ -1302,6 +1302,84 @@ uniq (...)
     }
 
 void
+uniq_by (code, ...)
+    SV *code;
+PROTOTYPE: &@
+CODE:
+{
+        dMULTICALL; dSTACK;
+	register int i, count = 0, seen_undef = 0;
+	HV *seen_values = newHV();
+        HV *stash;
+        GV *gv;
+        I32 gimme = G_SCALAR;
+        CV *cv;
+
+        COPY_STACK;
+
+        cv = sv_2cv(code, &stash, &gv, 0);
+        PUSH_MULTICALL(cv);
+        SAVESPTR(GvSV(PL_defgv));
+
+	/* don't build return list in scalar context */
+	if (GIMME == G_SCALAR) {
+	    for (i = 1; i < items; i++) {
+                GvSV(PL_defgv) = STA(i);
+                MULTICALL;
+                if (SvOK(*PL_stack_sp)) {
+                    if (!hv_exists_ent(seen_values, *PL_stack_sp, 0)) {
+                        count++;
+                        hv_store_ent(seen_values, *PL_stack_sp, &PL_sv_yes, 0);
+                    }
+                } else {
+                    if (!seen_undef) {
+                        count++;
+                        seen_undef = 1;
+                    }
+                }
+	    }
+
+            POP_MULTICALL;
+            FREE_STACK;
+
+	    SvREFCNT_dec(seen_values);
+
+	    ST(0) = sv_2mortal(newSViv(count));
+	    XSRETURN(1);
+	}
+
+	/* list context: populate SP with mortal copies */
+	for (i = 1; i < items; i++) {
+            GvSV(PL_defgv) = STA(i);
+            MULTICALL;
+            if (SvOK(*PL_stack_sp)) {
+                if (!hv_exists_ent(seen_values, *PL_stack_sp, 0)) {
+                    ST(count) = sv_2mortal(newSVsv(ST(i)));
+                    /* POP_MULTICALL further down will decrement it by one */
+                    SvREFCNT_inc(ST(count));
+                    count++;
+                    hv_store_ent(seen_values, *PL_stack_sp, &PL_sv_yes, 0);
+                }
+            } else {
+                if (!seen_undef) {
+                    ST(count) = sv_2mortal(newSVsv(ST(i)));
+                    /* POP_MULTICALL further down will decrement it by one */
+                    SvREFCNT_inc(ST(count));
+                    count++;
+                    seen_undef = 1;
+                }
+            }
+	}
+
+        POP_MULTICALL;
+        FREE_STACK;
+
+	SvREFCNT_dec(seen_values);
+
+	XSRETURN(count);
+}
+
+void
 minmax (...)
     PROTOTYPE: @
     CODE:

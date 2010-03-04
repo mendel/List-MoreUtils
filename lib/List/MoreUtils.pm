@@ -14,7 +14,7 @@ use vars qw($VERSION @ISA @EXPORT_OK %EXPORT_TAGS);
     all => [ qw(any all none notall true false firstidx first_index lastidx
 		last_index insert_after insert_after_string apply after after_incl before
 		before_incl indexes firstval first_value lastval last_value each_array
-		each_arrayref pairwise natatime mesh zip uniq minmax part bsearch) ],
+		each_arrayref pairwise natatime mesh zip uniq uniq_by minmax part bsearch) ],
 );
 
 @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
@@ -286,6 +286,19 @@ sub uniq (@) {
     my %h;
     my $ref = \1;
     map { $h{defined $_ ? $_ : $ref}++ == 0 ? $_ : () } @_;
+}
+
+sub uniq_by (&@) {
+    my $code = shift;
+
+    my %seen_value;
+    my $seen_undef;
+
+    grep {
+        my $compare_by = $code->();
+
+	defined $compare_by ? !$seen_value{$compare_by}++ : !$seen_undef++
+    } @_;
 }
 
 sub minmax (@) {
@@ -653,6 +666,17 @@ returns the number of unique elements in LIST.
     my @x = uniq 1, 1, 2, 2, 3, 5, 3, 4; # returns 1 2 3 5 4
     my $x = uniq 1, 1, 2, 2, 3, 5, 3, 4; # returns 5
 
+=item uniq_by BLOCK LIST
+
+Returns a new list of those elements of LIST that are unique on the keys that
+BLOCK returns: evaluates BLOCK for all the elements of LIST, and only keeps
+those elements for which BLOCK returns a value it has not returned yet. The
+order of elements in the returned list is the same as in LIST. In scalar
+context, returns the number of elements the unique list would contain.
+
+    my @x = uniq_by { $_ % 3 } 4, 4, 5, 5, 7, 6, 8, 9; # returns 4, 5, 6
+    my $x = uniq_by { $_ % 3 } 4, 4, 5, 5, 7, 6, 8, 9; # returns 3
+
 =item minmax LIST
 
 Calculates the minimum and maximum of LIST and returns a two element list with
@@ -792,11 +816,6 @@ A pile of requests from other people is still pending further processing in my
 mailbox. This includes:
 
 =over 4
-
-=item * uniq_by(&@)
-
-Use code-reference to extract a key based on which the uniqueness is
-determined. Suggested by Aaron Crane.
 
 =item * delete_index
 
